@@ -43,9 +43,16 @@ class FakeShutil:
         return "/usr/bin/" + name if name in self.present else None
 
 
-def stub(present=(), output=None):
-    """Put the module in a machine of our choosing."""
+def stub(present=(), output=None, games=()):
+    """Put the module in a machine of our choosing.
+
+    `games` matters as much as `present` does: /usr/games is looked in as well
+    as PATH, so a suite that stubs only PATH passes on a laptop and fails on
+    the machine this is for -- which is precisely what it did, the first time
+    it was run on a console with Steam actually installed.
+    """
     core.shutil = FakeShutil(present)
+    core.GAME_BINS = tuple(games)
     table = output or {}
     calls = []
 
@@ -88,20 +95,19 @@ check(core.launch_argv() is None and core.installed() is False,
 # Kodi does not necessarily inherit an interactive shell's PATH, and Debian
 # puts steam in /usr/games. Found by looking, or a machine with Steam on it is
 # offered Steam again.
-core.GAME_BINS = (os.path.dirname(os.path.abspath(__file__)),)
-here = os.path.join(core.GAME_BINS[0], "steam")
+GAMES = os.path.dirname(os.path.abspath(__file__))
+here = os.path.join(GAMES, "steam")
 try:
     with open(here, "w") as handle:
         handle.write("#!/bin/sh\n")
     os.chmod(here, 0o755)
-    stub(present=[])
+    stub(present=[], games=[GAMES])
     check(core.native() == here,
           "steam in /usr/games is found even when PATH has never heard of it")
     check(core.launch_argv() == [here, "-gamepadui"],
           "and is what gets started")
 finally:
     os.unlink(here)
-core.GAME_BINS = ("/usr/games", "/usr/local/games")
 
 print("how it would be installed")
 core.HELPER = os.path.join(HERE, "does-not-exist")
