@@ -112,26 +112,54 @@ else
   echo "no ~/.kodi/addons yet; run Kodi once, then run this again"
 fi
 
-say "telling Kodi it may run it"
-# Finding an add-on and being willing to run it are two different things. Kodi
-# registers one it finds on disk with enabled=0, and then answers
+say "telling Kodi about it"
+# Two things Kodi will not work out for itself.
+#
+# It registers an add-on it finds on disk with enabled=0, and then answers
 # RunScript(script.steam) with "Not executing non-existing script" -- which
-# reads as a broken add-on and is really a switch nobody has thrown. Nobody at
-# a television has any reason to guess that, so this throws it.
-python3 - <<'ENABLE' || echo "could not enable it here; turn it on in Settings -> Add-ons -> My add-ons -> Program add-ons -> Steam"
+# reads as a broken add-on and is really a switch nobody has thrown.
+#
+# And it caches every image it draws, by path. The tile was replaced above,
+# at the same path, so without this the old picture is what stays on the
+# menu -- which looked exactly like the copy having silently failed.
+python3 - <<'TELL' || echo "could not finish; enable it in Settings -> Add-ons -> My add-ons -> Program add-ons -> Steam"
 import base64, glob, json, os, re, sqlite3, subprocess, sys, time, urllib.request
 
 ADDON = "script.steam"
+TILE = "_steam.png"
 home = os.path.expanduser("~")
-dbs = sorted(glob.glob(os.path.join(home, ".kodi/userdata/Database/Addons*.db")))
+addon_dbs = sorted(glob.glob(os.path.join(home, ".kodi/userdata/Database/Addons*.db")))
+texture_dbs = sorted(glob.glob(os.path.join(home, ".kodi/userdata/Database/Textures*.db")))
 running = subprocess.run(["pgrep", "-x", "kodi.bin"],
                          capture_output=True).returncode == 0
+settings = os.path.join(home, ".kodi/userdata/guisettings.xml")
+text = open(settings, encoding="utf-8").read() if os.path.exists(settings) else ""
+
+
+def setting(name, default=""):
+    found = re.search(r'<setting id="%s"[^>]*>([^<]*)</setting>' % name, text)
+    return found.group(1) if found else default
+
+
+def call(method, params):
+    """One JSON-RPC call to the Kodi that is running."""
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method,
+                       "params": params}).encode()
+    url = "http://127.0.0.1:%s/jsonrpc" % setting("services.webserverport", "8080")
+    request = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json"})
+    if setting("services.webserverauthentication", "true") == "true":
+        pair = "%s:%s" % (setting("services.webserverusername", "kodi"),
+                          setting("services.webserverpassword"))
+        request.add_header("Authorization",
+                           "Basic " + base64.b64encode(pair.encode()).decode())
+    return json.load(urllib.request.urlopen(request, timeout=15))
 
 
 def enabled_in_db():
-    if not dbs:
+    if not addon_dbs:
         return None
-    con = sqlite3.connect("file:%s?mode=ro" % dbs[-1], uri=True)
+    con = sqlite3.connect("file:%s?mode=ro" % addon_dbs[-1], uri=True)
     try:
         row = con.execute("select enabled from installed where addonID=?",
                           (ADDON,)).fetchone()
@@ -140,51 +168,62 @@ def enabled_in_db():
     return None if row is None else bool(row[0])
 
 
-if enabled_in_db():
-    print("already enabled")
-    sys.exit(0)
+def forget_tile_while_running():
+    got = call("Textures.GetTextures",
+               {"filter": {"field": "url", "operator": "contains", "value": TILE},
+                "properties": ["url"]})
+    cached = got.get("result", {}).get("textures", [])
+    for one in cached:
+        call("Textures.RemoveTexture", {"textureid": one["textureid"]})
+    return len(cached)
+
+
+def forget_tile_while_stopped():
+    if not texture_dbs:
+        return 0
+    con = sqlite3.connect(texture_dbs[-1])
+    with con:
+        rows = list(con.execute("select id, cachedurl from texture "
+                                "where url like ?", ("%" + TILE + "%",)))
+        for _id, cachedurl in rows:
+            # The picture as well as the row: a row without its file is
+            # rebuilt, a file without its row is never looked at again.
+            try:
+                os.remove(os.path.join(home, ".kodi/userdata/Thumbnails", cachedurl))
+            except OSError:
+                pass
+        con.execute("delete from texture where url like ?", ("%" + TILE + "%",))
+    con.close()
+    return len(rows)
+
 
 if running:
-    # Through Kodi itself, because Kodi holds this in memory while it runs and
-    # writes it back on the way out: an edit made underneath it is undone at
-    # the next shutdown, silently.
-    settings = os.path.join(home, ".kodi/userdata/guisettings.xml")
-    text = open(settings, encoding="utf-8").read() if os.path.exists(settings) else ""
-
-    def setting(name, default=""):
-        found = re.search(r'<setting id="%s"[^>]*>([^<]*)</setting>' % name, text)
-        return found.group(1) if found else default
-
     if setting("services.webserver") != "true":
         print("Kodi is running and its web service is off, so it cannot be "
-              "asked to enable the add-on.")
+              "asked to enable the add-on or to forget the old tile.")
         print("Either turn on Settings -> Services -> Control -> Allow remote "
               "control via HTTP, or close Kodi and run this again.")
         sys.exit(1)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1,
-                       "method": "Addons.SetAddonEnabled",
-                       "params": {"addonid": ADDON, "enabled": True}}).encode()
-    url = "http://127.0.0.1:%s/jsonrpc" % setting("services.webserverport", "8080")
-    request = urllib.request.Request(url, data=body,
-                                     headers={"Content-Type": "application/json"})
-    if setting("services.webserverauthentication", "true") == "true":
-        pair = "%s:%s" % (setting("services.webserverusername", "kodi"),
-                          setting("services.webserverpassword"))
-        request.add_header("Authorization",
-                           "Basic " + base64.b64encode(pair.encode()).decode())
-    answer = json.load(urllib.request.urlopen(request, timeout=10))
-    if answer.get("result") != "OK":
-        print("Kodi would not enable it: %s" % answer)
-        sys.exit(1)
-    print("Kodi has been told to enable it")
+    if enabled_in_db():
+        print("already enabled")
+    else:
+        # Through Kodi itself, because it holds this in memory while it runs
+        # and writes it back on the way out: an edit made underneath a running
+        # Kodi is undone at the next shutdown, silently.
+        answer = call("Addons.SetAddonEnabled", {"addonid": ADDON, "enabled": True})
+        if answer.get("result") != "OK":
+            print("Kodi would not enable it: %s" % answer)
+            sys.exit(1)
+        print("enabled")
+    print("dropped %d cached copy(ies) of the menu tile" % forget_tile_while_running())
     sys.exit(0)
 
-# Kodi is not running, so its database is ours to write -- which is what
+# Kodi is not running, so its databases are ours to write -- which is what
 # kodi-retrobox's kodi-setup.sh does for every add-on at install time.
-if not dbs:
+if not addon_dbs:
     print("no add-on database yet; run Kodi once, then run this again")
     sys.exit(1)
-con = sqlite3.connect(dbs[-1])
+con = sqlite3.connect(addon_dbs[-1])
 now = time.strftime("%Y-%m-%d %H:%M:%S")
 with con:
     if enabled_in_db() is None:
@@ -194,8 +233,9 @@ with con:
         con.execute("update installed set enabled=1, disabledReason=0 "
                     "where addonID=?", (ADDON,))
 con.close()
-print("enabled in %s" % os.path.basename(dbs[-1]))
-ENABLE
+print("enabled in %s" % os.path.basename(addon_dbs[-1]))
+print("dropped %d cached copy(ies) of the menu tile" % forget_tile_while_stopped())
+TELL
 
 say "done"
 echo "Open it from Kodi: Programs -> Steam, or RunScript(script.steam)."

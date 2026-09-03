@@ -66,6 +66,12 @@ check("enabled=1" in install and "disabledReason=0" in install,
       "and a stopped one has its database written, the way kodi-retrobox does")
 check("Not executing non-existing script" in install,
       "with the message it fixes written down beside it")
+# The second thing Kodi will not work out: it caches images by path, and the
+# tile is replaced at the same path every install.
+check("Textures.RemoveTexture" in install,
+      "the cached copy of the old tile is dropped from a running Kodi")
+check("delete from texture where url like" in install,
+      "and from the database of a stopped one, which is the same fault later")
 
 print("the menu icon is Valve's where the machine has it")
 check("/usr/share/icons/hicolor/256x256/apps/steam.png" in install,
