@@ -51,6 +51,12 @@ print("install.sh")
 install = read("install.sh")
 check(".kodi/addons/" + ADDON_ID in install,
       "links the checkout in under the same id")
+# kodi-retrobox clones this repository straight into ~/.kodi/addons/script.steam
+# and then runs this script, so the link it wants to make is a link to the
+# place it is already standing. `ln -sfn dir dir` puts a link inside that
+# directory rather than replacing it, which is a mess to find later.
+check("readlink -f" in install and "nothing to link" in install,
+      "and notices when it is already there, rather than linking into itself")
 check("tests/test_*.py" in install or "test_*.py" in install,
       "and runs this suite before it installs anything")
 check("wmctrl" in install and "xdotool" in install,

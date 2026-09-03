@@ -89,9 +89,19 @@ else
 fi
 
 say "the Kodi add-on"
+LINK="$HOME/.kodi/addons/script.steam"
 if [ -d "$HOME/.kodi/addons" ]; then
-  ln -sfn "$REPO" "$HOME/.kodi/addons/script.steam"
-  echo "linked into ~/.kodi/addons"
+  # Already where Kodi looks? Then there is nothing to link, and trying is
+  # worse than doing nothing: `ln -sfn dir dir` does not replace a directory
+  # with a link to itself, it puts a link *inside* it. kodi-retrobox clones
+  # this repository straight into ~/.kodi/addons/script.steam, so this is the
+  # ordinary case there rather than a corner of one.
+  if [ "$(readlink -f "$REPO")" = "$(readlink -f "$LINK" 2>/dev/null)" ]; then
+    echo "already in ~/.kodi/addons; nothing to link"
+  else
+    ln -sfn "$REPO" "$LINK"
+    echo "linked into ~/.kodi/addons"
+  fi
   # Kodi reads its add-on list once, at startup. Until it rescans, the add-on
   # is on disk and unknown -- and a menu entry pointing at it answers with
   # "you need to install this add-on", which sounds like a packaging fault
