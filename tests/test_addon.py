@@ -74,6 +74,10 @@ check("Not executing non-existing script" in install,
       "with the message it fixes written down beside it")
 # The second thing Kodi will not work out: it caches images by path, and the
 # tile is replaced at the same path every install.
+check("for attempt in range(" in install,
+      "the enable waits for Kodi's rescan: on a fresh install it is asked "
+      "about an add-on Kodi noticed two seconds ago, and answers Invalid "
+      "params -- which reads like a bad request and is a race")
 check("Textures.RemoveTexture" in install,
       "the cached copy of the old tile is dropped from a running Kodi")
 check("delete from texture where url like" in install,
