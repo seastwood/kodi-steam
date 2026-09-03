@@ -76,9 +76,26 @@ def environment():
     return env
 
 
+# Where Debian and Ubuntu put game binaries. On the path of an interactive
+# shell, by way of /etc/profile -- and that is the whole problem: Kodi is
+# started by a session manager, and what a login shell would have put in PATH
+# is not something a program inheriting the session's environment can count
+# on. The console this was written for does have it; another machine having it
+# is luck, and a Steam that is installed but invisible is the worst of both
+# answers, because the add-on would offer to install what is already there.
+GAME_BINS = ("/usr/games", "/usr/local/games")
+
+
 def native():
-    """Steam from a package, if it is on the path."""
-    return shutil.which("steam")
+    """Steam from a package, if it is anywhere this can find it."""
+    found = shutil.which("steam")
+    if found:
+        return found
+    for folder in GAME_BINS:
+        candidate = os.path.join(folder, "steam")
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
 
 
 def flatpak_app():

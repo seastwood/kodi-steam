@@ -85,6 +85,24 @@ stub(present=[])
 check(core.launch_argv() is None and core.installed() is False,
       "a machine with neither has neither")
 
+# Kodi does not necessarily inherit an interactive shell's PATH, and Debian
+# puts steam in /usr/games. Found by looking, or a machine with Steam on it is
+# offered Steam again.
+core.GAME_BINS = (os.path.dirname(os.path.abspath(__file__)),)
+here = os.path.join(core.GAME_BINS[0], "steam")
+try:
+    with open(here, "w") as handle:
+        handle.write("#!/bin/sh\n")
+    os.chmod(here, 0o755)
+    stub(present=[])
+    check(core.native() == here,
+          "steam in /usr/games is found even when PATH has never heard of it")
+    check(core.launch_argv() == [here, "-gamepadui"],
+          "and is what gets started")
+finally:
+    os.unlink(here)
+core.GAME_BINS = ("/usr/games", "/usr/local/games")
+
 print("how it would be installed")
 core.HELPER = os.path.join(HERE, "does-not-exist")
 stub(present=["flatpak"])

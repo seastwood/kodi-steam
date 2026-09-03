@@ -86,27 +86,56 @@ def start_big_picture():
             "moment and it will be brought forward.")
 
 
+# The one command that turns the Flathub machine into a package machine. Said
+# in full, with the path, because somebody reading it is at a television and
+# will be typing it somewhere else entirely.
+HELPER_SETUP = "~/kodi-steam/install.sh --helper"
+
+
 def offer_install():
-    """Steam is not here. Offer to fetch it, and say what that involves."""
+    """Steam is not here. Offer to fetch it, and say what that involves.
+
+    Three machines to speak to, and they want different things said. One has
+    the helper and can simply be asked. One has Flatpak only, and should be
+    told how to get the better version before being offered the other. One has
+    neither, and needs directions rather than a button.
+    """
     route, argv = steam_core.install_route()
     if not route:
         xbmcgui.Dialog().ok(
             TITLE,
             "Steam is not installed, and there is no way to install it from "
             "here.\n\n"
-            "Run install.sh from the kodi-steam checkout once, at a terminal. "
+            "Run this once, at a terminal:\n"
+            "    " + HELPER_SETUP + "\n\n"
             "It puts the privileged helper in place, and after that this "
-            "screen can install Steam on its own.")
+            "screen installs Steam on its own.")
         return
 
-    where = ("the Steam package" if route == "apt"
-             else "Steam from Flathub, for this user only")
-    if not xbmcgui.Dialog().yesno(
-            TITLE,
-            "Steam is not installed on this machine.\n\n"
-            "Install " + where + " now? It downloads " + DOWNLOAD_SIZE + " and "
-            "takes several minutes. You can keep using Kodi while it runs.",
-            nolabel="Not now", yeslabel="Install Steam"):
+    if route == "apt":
+        question = ("Steam is not installed on this machine.\n\n"
+                    "Install the Steam package now? It downloads "
+                    + DOWNLOAD_SIZE + " and takes several minutes. You can "
+                    "keep using Kodi while it runs.")
+        yes = "Install Steam"
+    else:
+        # Flathub is what this machine can do unaided, and it works -- but the
+        # package is the better answer on a machine with controllers in it, so
+        # the way to get that is offered first rather than buried in a README
+        # nobody is holding.
+        question = ("Steam is not installed on this machine.\n\n"
+                    "The package version needs one command at a terminal "
+                    "first:\n"
+                    "    " + HELPER_SETUP + "\n"
+                    "after which this screen installs it for you.\n\n"
+                    "Or install the Flathub version now, for this user only. "
+                    "It needs no password, downloads " + DOWNLOAD_SIZE + ", "
+                    "and works -- its sandbox is simply one more thing between "
+                    "Steam and your controllers.")
+        yes = "Install Flathub"
+
+    if not xbmcgui.Dialog().yesno(TITLE, question, nolabel="Not now",
+                                  yeslabel=yes):
         return
 
     if not install_with_progress(route, argv):

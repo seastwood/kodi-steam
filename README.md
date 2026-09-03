@@ -50,6 +50,10 @@ naming that script and nothing else. apt itself is never handed to sudo:
 `apt-get install ./anything.deb` runs a maintainer script as root, so a rule
 permitting apt permits everything.
 
+On a machine where that setup has not been done, the add-on says so and gives
+the command — `./install.sh --helper` — rather than quietly settling for the
+other route without mentioning it.
+
 **Flathub** is the fallback, and it needs no root at all — `flatpak install
 --user`. It is second rather than first because the sandbox sits between Steam
 and the machine's controllers, which is the one thing a games console cannot
