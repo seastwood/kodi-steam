@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.steam" name="Steam" version="1.0.0" provider-name="Seth Eastwood">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.script" library="main.py">
+    <provides>executable</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Play your Steam library in Big Picture</summary>
+    <description lang="en_GB">Starts Steam in Big Picture and brings it in front of Kodi, so a controller is all you need from the sofa. Installs Steam itself if the machine has not got it, and comes back to Kodi when you quit. Sits beside the emulators on a Kodi machine used as a games console.</description>
+    <platform>linux</platform>
+    <license>MIT</license>
+    <assets>
+      <icon>icon.png</icon>
+    </assets>
+  </extension>
+</addon>

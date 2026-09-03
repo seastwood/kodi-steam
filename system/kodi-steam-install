@@ -1,0 +1,25 @@
+#!/bin/sh
+# Install Steam, and nothing else.
+#
+# The whole of the privileged half of this add-on. It exists so the sudoers
+# rule beside it can name one script with no arguments: handing apt itself to
+# sudo would be handing over the machine, because `apt-get install ./x.deb`
+# runs a maintainer script as root and apt cannot be talked out of that.
+#
+# Ubuntu and Mint package the client as `steam-installer`, a small package that
+# fetches Valve's own bootstrapper on first run. That is the supported route on
+# this family of distributions, and the reason the download this triggers is
+# far larger than the package.
+set -eu
+
+export DEBIAN_FRONTEND=noninteractive
+
+# Steam is 32-bit at its root and will not install without this. Idempotent,
+# and already true on any machine that has ever had it.
+if ! dpkg --print-foreign-architectures | grep -qx i386; then
+  echo "enabling i386 packages, which Steam needs"
+  dpkg --add-architecture i386
+fi
+
+apt-get update -qq
+apt-get install -y steam-installer

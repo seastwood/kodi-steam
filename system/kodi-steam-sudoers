@@ -1,0 +1,6 @@
+# Let the desktop user install Steam from the Kodi add-on, and nothing else.
+# Installed to /etc/sudoers.d/kodi-steam with mode 0440.
+#
+# One script, no arguments: the script decides what gets installed, so this
+# rule cannot be talked into installing anything else.
+%sudo ALL=(root) NOPASSWD: /usr/local/libexec/kodi-steam-install
