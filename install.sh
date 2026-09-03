@@ -49,7 +49,13 @@ if command -v steam >/dev/null 2>&1; then
 else
   WANT_HELPER=1
 fi
-[ "${1:-}" = "--helper" ] && WANT_HELPER=1
+case "${1:-}" in
+  --helper) WANT_HELPER=1 ;;
+  # For a machine being set up over SSH, where a sudo prompt has no terminal to
+  # appear on, and for anybody who would rather not have the rule at all: the
+  # add-on falls back to Flathub, which needs no root.
+  --no-helper) WANT_HELPER=0 ;;
+esac
 
 if [ "$WANT_HELPER" = 1 ]; then
   sudo install -D -m 0755 "$REPO/system/kodi-steam-install" "$LIBEXEC"
