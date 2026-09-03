@@ -72,11 +72,24 @@ if [ "$WANT_HELPER" = 1 ]; then
 fi
 
 say "the menu icon"
-# kodi-retrobox builds its home menu from ~/.kodi/media/consoles, and looks for
+# kodi-retrobox builds its home menu from ~/.kodi/media/consoles and looks for
 # _steam.png there. Anywhere else this is harmless: nothing reads it.
+#
+# Valve's own icon if this machine has one, which it does the moment Steam is
+# installed: it is the icon somebody is looking for on a menu, and no drawing
+# of mine is going to be recognised faster than the real one. What this
+# repository ships is a fallback rather than a preference -- a trademark is a
+# poor thing to vendor into a project, and a machine with no Steam on it yet
+# still needs a tile.
+ICON="$REPO/media/_steam.png"
+for candidate in /usr/share/icons/hicolor/256x256/apps/steam.png \
+                 /usr/share/icons/hicolor/48x48/apps/steam.png \
+                 /usr/share/pixmaps/steam.png; do
+  [ -f "$candidate" ] && { ICON="$candidate"; break; }
+done
 if [ -d "$HOME/.kodi/media/consoles" ]; then
-  cp -f "$REPO/media/_steam.png" "$HOME/.kodi/media/consoles/_steam.png"
-  echo "copied _steam.png into ~/.kodi/media/consoles"
+  cp -f "$ICON" "$HOME/.kodi/media/consoles/_steam.png"
+  echo "menu tile from $ICON"
 else
   echo "no ~/.kodi/media/consoles; skipped (only kodi-retrobox uses it)"
 fi
@@ -98,6 +111,91 @@ if [ -d "$HOME/.kodi/addons" ]; then
 else
   echo "no ~/.kodi/addons yet; run Kodi once, then run this again"
 fi
+
+say "telling Kodi it may run it"
+# Finding an add-on and being willing to run it are two different things. Kodi
+# registers one it finds on disk with enabled=0, and then answers
+# RunScript(script.steam) with "Not executing non-existing script" -- which
+# reads as a broken add-on and is really a switch nobody has thrown. Nobody at
+# a television has any reason to guess that, so this throws it.
+python3 - <<'ENABLE' || echo "could not enable it here; turn it on in Settings -> Add-ons -> My add-ons -> Program add-ons -> Steam"
+import base64, glob, json, os, re, sqlite3, subprocess, sys, time, urllib.request
+
+ADDON = "script.steam"
+home = os.path.expanduser("~")
+dbs = sorted(glob.glob(os.path.join(home, ".kodi/userdata/Database/Addons*.db")))
+running = subprocess.run(["pgrep", "-x", "kodi.bin"],
+                         capture_output=True).returncode == 0
+
+
+def enabled_in_db():
+    if not dbs:
+        return None
+    con = sqlite3.connect("file:%s?mode=ro" % dbs[-1], uri=True)
+    try:
+        row = con.execute("select enabled from installed where addonID=?",
+                          (ADDON,)).fetchone()
+    finally:
+        con.close()
+    return None if row is None else bool(row[0])
+
+
+if enabled_in_db():
+    print("already enabled")
+    sys.exit(0)
+
+if running:
+    # Through Kodi itself, because Kodi holds this in memory while it runs and
+    # writes it back on the way out: an edit made underneath it is undone at
+    # the next shutdown, silently.
+    settings = os.path.join(home, ".kodi/userdata/guisettings.xml")
+    text = open(settings, encoding="utf-8").read() if os.path.exists(settings) else ""
+
+    def setting(name, default=""):
+        found = re.search(r'<setting id="%s"[^>]*>([^<]*)</setting>' % name, text)
+        return found.group(1) if found else default
+
+    if setting("services.webserver") != "true":
+        print("Kodi is running and its web service is off, so it cannot be "
+              "asked to enable the add-on.")
+        print("Either turn on Settings -> Services -> Control -> Allow remote "
+              "control via HTTP, or close Kodi and run this again.")
+        sys.exit(1)
+    body = json.dumps({"jsonrpc": "2.0", "id": 1,
+                       "method": "Addons.SetAddonEnabled",
+                       "params": {"addonid": ADDON, "enabled": True}}).encode()
+    url = "http://127.0.0.1:%s/jsonrpc" % setting("services.webserverport", "8080")
+    request = urllib.request.Request(url, data=body,
+                                     headers={"Content-Type": "application/json"})
+    if setting("services.webserverauthentication", "true") == "true":
+        pair = "%s:%s" % (setting("services.webserverusername", "kodi"),
+                          setting("services.webserverpassword"))
+        request.add_header("Authorization",
+                           "Basic " + base64.b64encode(pair.encode()).decode())
+    answer = json.load(urllib.request.urlopen(request, timeout=10))
+    if answer.get("result") != "OK":
+        print("Kodi would not enable it: %s" % answer)
+        sys.exit(1)
+    print("Kodi has been told to enable it")
+    sys.exit(0)
+
+# Kodi is not running, so its database is ours to write -- which is what
+# kodi-retrobox's kodi-setup.sh does for every add-on at install time.
+if not dbs:
+    print("no add-on database yet; run Kodi once, then run this again")
+    sys.exit(1)
+con = sqlite3.connect(dbs[-1])
+now = time.strftime("%Y-%m-%d %H:%M:%S")
+with con:
+    if enabled_in_db() is None:
+        con.execute("insert into installed(addonID, enabled, installDate) "
+                    "values(?, 1, ?)", (ADDON, now))
+    else:
+        con.execute("update installed set enabled=1, disabledReason=0 "
+                    "where addonID=?", (ADDON,))
+con.close()
+print("enabled in %s" % os.path.basename(dbs[-1]))
+ENABLE
 
 say "done"
 echo "Open it from Kodi: Programs -> Steam, or RunScript(script.steam)."

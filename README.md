@@ -33,8 +33,25 @@ cd kodi-steam
 ```
 
 `install.sh` links the checkout into `~/.kodi/addons/script.steam`, makes sure
-`wmctrl` and `xdotool` are present, and — the one part that needs a password —
-installs the helper that lets the add-on install Steam later without one.
+`wmctrl` and `xdotool` are present, puts the menu tile where kodi-retrobox
+looks for it, tells Kodi it may run the add-on, and — the one part that needs
+a password — installs the helper that lets the add-on install Steam later
+without one.
+
+That third step is not a formality. Kodi registers an add-on it finds on disk
+with `enabled=0`, and then answers `RunScript(script.steam)` with *"Not
+executing non-existing script"* — which reads as a broken add-on and is really
+a switch nobody has thrown. A running Kodi is asked through its own JSON-RPC,
+because it holds that state in memory and writes it back on the way out, so an
+edit made underneath it is silently undone at the next shutdown; a stopped one
+has its database written directly, which is what kodi-retrobox's
+`kodi-setup.sh` does for every add-on at install time.
+
+The menu tile is Valve's own icon when the machine has one — after Steam is
+installed, `/usr/share/icons/hicolor/256x256/apps/steam.png` is right there,
+and no drawing is recognised faster than the real thing. The icon in this
+repository is the fallback for a machine that has not got Steam yet: a
+trademark is a poor thing to vendor into a project.
 
 A pull is all an update takes: the repository *is* the add-on, so there is
 nothing to copy into place.

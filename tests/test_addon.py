@@ -56,6 +56,23 @@ check("tests/test_*.py" in install or "test_*.py" in install,
 check("wmctrl" in install and "xdotool" in install,
       "makes sure the window tools are here, which the launch depends on")
 
+print("Kodi is told it may run it")
+# The fault this exists for: Kodi registered the add-on with enabled=0 and
+# answered RunScript(script.steam) with "Not executing non-existing script",
+# which reads as a broken add-on and is a switch nobody threw.
+check("SetAddonEnabled" in install,
+      "a running Kodi is asked through its own API, not edited underneath")
+check("enabled=1" in install and "disabledReason=0" in install,
+      "and a stopped one has its database written, the way kodi-retrobox does")
+check("Not executing non-existing script" in install,
+      "with the message it fixes written down beside it")
+
+print("the menu icon is Valve's where the machine has it")
+check("/usr/share/icons/hicolor/256x256/apps/steam.png" in install,
+      "the system icon is preferred: it is the one somebody is looking for")
+check("$REPO/media/_steam.png" in install,
+      "and what this repository ships is the fallback, not the preference")
+
 print("the privileged half")
 core = read("steam_core.py")
 helper = re.search(r'HELPER = "([^"]+)"', core).group(1)
