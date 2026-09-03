@@ -47,11 +47,22 @@ edit made underneath it is silently undone at the next shutdown; a stopped one
 has its database written directly, which is what kodi-retrobox's
 `kodi-setup.sh` does for every add-on at install time.
 
-The menu tile is Valve's own icon when the machine has one — after Steam is
-installed, `/usr/share/icons/hicolor/256x256/apps/steam.png` is right there,
-and no drawing is recognised faster than the real thing. The icon in this
-repository is the fallback for a machine that has not got Steam yet: a
-trademark is a poor thing to vendor into a project.
+The menu tile is Valve's own icon when the machine has one, and finding it is
+less obvious than it looks. `/usr/share/icons/hicolor/256x256/apps/steam.png`
+is named exactly right and, on Debian and Ubuntu, is **a picture of cardboard
+boxes** — it belongs to `steam-installer`, and the packaging system's idea of
+a package is not what somebody scanning a menu for Steam is looking for. The
+real one comes with the client:
+`~/.steam/debian-installation/deb-installer/steam-launcher/icons/256/steam.png`.
+
+So the client's own icon is preferred, the theme's is used only where `dpkg`
+says the client's package put it there (or where there is no dpkg to ask), and
+the drawing in this repository is the fallback for a machine that has not got
+Steam yet — a trademark is a poor thing to vendor into a project. The tile is
+written again the moment the add-on finishes installing Steam, because until
+then the good icon does not exist, and Kodi is told to forget the cached copy
+at the same time: it caches images by path, the tile keeps its path, and a
+file replaced underneath that key is not something Kodi goes looking for.
 
 A pull is all an update takes: the repository *is* the add-on, so there is
 nothing to copy into place.

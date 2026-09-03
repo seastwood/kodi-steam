@@ -12,6 +12,7 @@ what that costs in time and bandwidth before starting, and opens Big Picture
 when it is done.
 """
 
+import json
 import sys
 
 import xbmc
@@ -151,9 +152,41 @@ def offer_install():
         return
 
     notify("Steam installed")
+    take_valves_icon()
     # Straight into it: somebody who just waited through a download asked for
     # Steam, not for a confirmation that Steam exists.
     start_big_picture()
+
+
+def take_valves_icon():
+    """Put Valve's own icon on the menu tile, now that there is one.
+
+    The tile is written at install time, when the only picture available is
+    the drawing this add-on ships -- the real one arrives with the client and
+    not before. So it is written again here, the moment the client exists.
+
+    And Kodi is told to forget what it had. It caches every image it draws,
+    keyed by path, and the tile keeps its path: a file replaced underneath
+    that key is not something Kodi goes looking for, so without this the new
+    icon is on the disk and the old one is on the menu, which looks exactly
+    like the copy having failed.
+    """
+    used = steam_core.refresh_tile()
+    if not used:
+        return
+    log("menu tile now %s" % used)
+    try:
+        found = json.loads(xbmc.executeJSONRPC(json.dumps({
+            "jsonrpc": "2.0", "id": 1, "method": "Textures.GetTextures",
+            "params": {"filter": {"field": "url", "operator": "contains",
+                                  "value": "_steam.png"},
+                       "properties": ["url"]}})))
+        for texture in found.get("result", {}).get("textures", []):
+            xbmc.executeJSONRPC(json.dumps({
+                "jsonrpc": "2.0", "id": 1, "method": "Textures.RemoveTexture",
+                "params": {"textureid": texture["textureid"]}}))
+    except Exception as exc:          # noqa: BLE001 - a stale icon is not fatal
+        log("could not clear the cached tile: %s" % exc, xbmc.LOGWARNING)
 
 
 def install_with_progress(route, argv):

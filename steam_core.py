@@ -45,9 +45,11 @@ RAISE_TRIES = 8
 RAISE_GAP = 0.7
 
 
-# The two ways this module reaches the outside world, named so a test can
-# replace them. Nothing else here calls subprocess directly.
+# The three ways this module reaches the outside world, named so a test can
+# replace them. Nothing else here calls subprocess, and nothing else asks the
+# filesystem whether a picture is there.
 popen = subprocess.Popen
+exists = os.path.isfile
 
 
 def sh(*argv, **kw):
@@ -133,6 +135,88 @@ def install_route():
         return "flatpak", ["flatpak", "install", "--user", "--assumeyes",
                            "--noninteractive", "flathub", FLATPAK_APP]
     return None, None
+
+
+# Where Valve's own icon is, in the order worth trying.
+#
+# Not /usr/share/icons/hicolor/*/apps/steam.png first, and on Debian and
+# Ubuntu not at all: there, that file belongs to `steam-installer` and is a
+# picture of cardboard boxes -- the packaging system's idea of a package,
+# which is honest about what the package is and nothing like what somebody
+# scanning a menu for Steam is looking for. It was the obvious path, it is
+# named exactly right, and it is wrong.
+#
+# The client brings the real one with it, so these all live inside an
+# installation rather than in the distribution's icon theme.
+ICON_PATHS = (
+    "~/.steam/debian-installation/deb-installer/steam-launcher/icons/256/steam.png",
+    "~/.steam/root/deb-installer/steam-launcher/icons/256/steam.png",
+    "~/.local/share/Steam/deb-installer/steam-launcher/icons/256/steam.png",
+    "~/.local/share/flatpak/app/com.valvesoftware.Steam/current/active/files/"
+    "share/icons/hicolor/256x256/apps/com.valvesoftware.Steam.png",
+    "/var/lib/flatpak/app/com.valvesoftware.Steam/current/active/files/"
+    "share/icons/hicolor/256x256/apps/com.valvesoftware.Steam.png",
+)
+
+# The distribution's own, which is right on distributions that package the
+# real client and wrong on the ones that package an installer for it. Asked
+# about rather than assumed, since the file cannot be told apart by looking.
+THEME_ICON = "/usr/share/icons/hicolor/256x256/apps/steam.png"
+
+# Where kodi-retrobox's menu looks for the tile.
+TILE = "~/.kodi/media/consoles/_steam.png"
+
+
+def theme_icon_is_valves():
+    """Whether the icon theme's steam.png came with Steam or with an installer.
+
+    dpkg knows who put it there. `steam-installer` is the package whose icon
+    is a stack of boxes; anything else -- Arch's `steam`, a distribution that
+    ships the client itself -- put Valve's own there.
+    """
+    if not exists(THEME_ICON):
+        return False
+    if not shutil.which("dpkg"):
+        return True                     # not a dpkg distribution: trust it
+    owner = sh("dpkg", "-S", THEME_ICON)
+    return bool(owner) and "steam-installer" not in owner
+
+
+def best_icon():
+    """Valve's icon if this machine has one, else None."""
+    for path in ICON_PATHS:
+        full = os.path.expanduser(path)
+        if exists(full):
+            return full
+    return THEME_ICON if theme_icon_is_valves() else None
+
+
+def refresh_tile(fallback=None):
+    """Put the best icon available on the menu tile. Returns what it used.
+
+    Called at install time and again after Steam itself is installed, because
+    the good icon does not exist until the client does -- the first time this
+    runs on a machine there is nothing but the fallback, and the second time
+    there is Valve's own.
+    """
+    tile = os.path.expanduser(TILE)
+    if not os.path.isdir(os.path.dirname(tile)):
+        return None                     # no kodi-retrobox here; nothing reads it
+    source = best_icon() or fallback
+    if not source or not exists(source):
+        return None
+    try:
+        with open(source, "rb") as reading:
+            data = reading.read()
+        if os.path.exists(tile):
+            with open(tile, "rb") as existing:
+                if existing.read() == data:
+                    return tile         # already right; do not disturb the cache
+        with open(tile, "wb") as writing:
+            writing.write(data)
+    except OSError:
+        return None
+    return source
 
 
 def can_flatpak():

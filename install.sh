@@ -75,21 +75,15 @@ say "the menu icon"
 # kodi-retrobox builds its home menu from ~/.kodi/media/consoles and looks for
 # _steam.png there. Anywhere else this is harmless: nothing reads it.
 #
-# Valve's own icon if this machine has one, which it does the moment Steam is
-# installed: it is the icon somebody is looking for on a menu, and no drawing
-# of mine is going to be recognised faster than the real one. What this
-# repository ships is a fallback rather than a preference -- a trademark is a
-# poor thing to vendor into a project, and a machine with no Steam on it yet
-# still needs a tile.
-ICON="$REPO/media/_steam.png"
-for candidate in /usr/share/icons/hicolor/256x256/apps/steam.png \
-                 /usr/share/icons/hicolor/48x48/apps/steam.png \
-                 /usr/share/pixmaps/steam.png; do
-  [ -f "$candidate" ] && { ICON="$candidate"; break; }
-done
-if [ -d "$HOME/.kodi/media/consoles" ]; then
-  cp -f "$ICON" "$HOME/.kodi/media/consoles/_steam.png"
-  echo "menu tile from $ICON"
+# Which icon that is comes from steam_core.py rather than from a list here,
+# because the answer is not obvious and is worth having in one place: Valve's
+# own, from inside the client's installation, and never Debian's
+# /usr/share/icons/hicolor/256x256/apps/steam.png, which belongs to
+# `steam-installer` and is a picture of cardboard boxes.
+USED=$(python3 -c "import sys; sys.path.insert(0, '$REPO'); import steam_core; \
+print(steam_core.refresh_tile('$REPO/media/_steam.png') or '')")
+if [ -n "$USED" ]; then
+  echo "menu tile from $USED"
 else
   echo "no ~/.kodi/media/consoles; skipped (only kodi-retrobox uses it)"
 fi

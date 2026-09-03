@@ -43,7 +43,7 @@ class FakeShutil:
         return "/usr/bin/" + name if name in self.present else None
 
 
-def stub(present=(), output=None, games=()):
+def stub(present=(), output=None, games=(), files=()):
     """Put the module in a machine of our choosing.
 
     `games` matters as much as `present` does: /usr/games is looked in as well
@@ -53,6 +53,10 @@ def stub(present=(), output=None, games=()):
     """
     core.shutil = FakeShutil(present)
     core.GAME_BINS = tuple(games)
+    # Which pictures this imaginary machine has. Real files where a test asked
+    # for real ones (the /usr/games check writes one), invented otherwise.
+    wanted = set(files)
+    core.exists = lambda path: path in wanted or os.path.isfile(path)
     table = output or {}
     calls = []
 
@@ -197,6 +201,27 @@ core.popen = refuse
 ok, tail = core.install(["sudo", "-n", "helper"], None)
 check(ok is False and "No such file" in tail,
       "and a command that cannot even start is a failure, not a traceback")
+
+print("which picture is Valve's")
+# The fault this exists for: /usr/share/icons/hicolor/256x256/apps/steam.png
+# is named exactly right and, on Debian and Ubuntu, is a picture of cardboard
+# boxes -- it belongs to `steam-installer`, and the packaging system's idea of
+# a package is not what somebody scanning a menu for Steam is looking for.
+stub(present=["dpkg"], files=[core.THEME_ICON],
+     output={"-S": "steam-installer: " + core.THEME_ICON})
+check(core.theme_icon_is_valves() is False,
+      "the icon theme's steam.png is refused when an installer put it there")
+stub(present=["dpkg"], files=[core.THEME_ICON],
+     output={"-S": "steam: " + core.THEME_ICON})
+check(core.theme_icon_is_valves() is True,
+      "and accepted when the client's own package did")
+stub(present=[], files=[core.THEME_ICON])
+check(core.theme_icon_is_valves() is True,
+      "a machine with no dpkg is taken at its word: nothing else to ask")
+check(core.ICON_PATHS[0].endswith("steam-launcher/icons/256/steam.png"),
+      "and what is tried first is the icon Valve ships inside the client")
+check(not any(p.startswith("/usr/share/icons") for p in core.ICON_PATHS),
+      "the theme path is never in that list -- it is the one that lied")
 
 print("the display")
 os.environ.pop("DISPLAY", None)
