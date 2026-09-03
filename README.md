@@ -102,11 +102,35 @@ first: the client maps small helper windows beside the real one, and raising a
 `pcgame_launch.py`'s finding on this machine, arrived at the hard way with
 Call of Duty 4.
 
+## Guests, and the store
+
+This machine may have [Fourth Player](https://github.com/seastwood/Fourth-Player)
+on it, which wires somebody in another house to a virtual pad here. That pad is
+read by whatever has the foreground, so Fourth Player withholds a guest's
+frames while Steam's own interface is in front — a guest can play a Steam game
+with you and cannot walk into the store.
+
+One gap survives that, and it is the reason this add-on asks a question. From
+*inside* a game, the Steam button opens the overlay; the foreground window is
+still the game, so the frames keep flowing, and the overlay reaches the store.
+Nothing here can close that. **Family View** can, and it is Valve's own: a PIN
+in front of the store, the settings and the library, in Big Picture under
+Settings → Family.
+
+So when Big Picture is asked for while guests are actually connected, this
+checks whether Family View has ever been set up, and says so if it has not.
+Whether it is *switched on* is not something it will claim: Steam keeps that in
+a signed binary blob, and a wrong guess in the reassuring direction is the one
+mistake worth avoiding — so a machine that has one is asked once and then
+remembered. Nobody connected means no question, because a warning about nobody
+is how people learn to dismiss warnings.
+
 ## Running the tests
 
 ```sh
 python3 tests/test_steam.py
 python3 tests/test_addon.py
+python3 tests/test_guests.py
 ```
 
 Neither touches a real Steam, a real apt, or a real screen: `sh` and `popen`

@@ -15,7 +15,10 @@ earns its place, because it installs without root at all, and a machine where
 nobody has set up the privileged helper can still get Steam from the sofa.
 """
 
+import glob
+import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -217,6 +220,95 @@ def refresh_tile(fallback=None):
     except OSError:
         return None
     return source
+
+
+# ---- who else is holding a controller, and what it can reach ----------------
+#
+# Fourth Player wires a guest in another house to a virtual pad on this
+# machine. That pad is read by whatever has the foreground, which is the whole
+# reason Fourth Player now withholds a guest's frames while Steam's own
+# interface is in front. One gap survives that, and it is the gap this warning
+# exists for: from *inside* a Steam game, the Steam button opens the overlay,
+# and the foreground window is still the game -- so the frames keep flowing and
+# the overlay is a store with a saved card in it.
+#
+# Family View is the answer to that, and it is Valve's rather than ours: a PIN
+# in front of the store, the settings and the library. So before Big Picture
+# goes up in front of guests who are already connected, it is worth asking
+# whether that PIN exists.
+
+CONTROL_SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"),
+                              "fourth-player.sock")
+LOCALCONFIG = "~/.steam/debian-installation/userdata/*/config/localconfig.vdf"
+LOCALCONFIGS = (
+    LOCALCONFIG,
+    "~/.steam/steam/userdata/*/config/localconfig.vdf",
+    "~/.local/share/Steam/userdata/*/config/localconfig.vdf",
+)
+
+
+def guests_connected():
+    """(session open, how many guests) according to Fourth Player itself.
+
+    Asked over its control socket rather than read out of its files: the
+    socket is the interface it offers, the files are its business, and one of
+    them holds the session's credentials.
+
+    Anything at all going wrong is "no session": this is a question asked
+    before starting Steam, and a machine with no Fourth Player on it must not
+    be interrogated about one.
+    """
+    try:
+        import socket as socketlib
+        with socketlib.socket(socketlib.AF_UNIX, socketlib.SOCK_STREAM) as sock:
+            sock.settimeout(3)
+            sock.connect(CONTROL_SOCKET)
+            sock.sendall(b'{"cmd": "status"}\n')
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+        answer = json.loads(data or b"{}")
+    except Exception:                 # noqa: BLE001 - no session, whatever the reason
+        return False, 0
+    if not answer.get("open"):
+        return False, 0
+    guests = answer.get("guests")
+    if isinstance(guests, list):
+        guests = len(guests)
+    return True, int(guests or 0)
+
+
+def family_view():
+    """"off", or "unknown" -- and never "on".
+
+    Steam keeps this in localconfig.vdf as a signed binary blob under
+    ParentalSettings. Whether the blob is *there* is a fact worth reading:
+    with no block and no settings, Family View has never been set up on this
+    machine and the answer is a confident "off".
+
+    What the blob says is another matter. It is undocumented, signed, and
+    Valve's to change, and a wrong guess in the reassuring direction is the
+    one mistake this must not make -- so it is never decoded, and a machine
+    that has one is "unknown" rather than "on". Unknown is asked about once
+    and then remembered, because crying wolf at every launch is how a warning
+    becomes something people learn to dismiss.
+    """
+    for pattern in LOCALCONFIGS:
+        for path in sorted(glob.glob(os.path.expanduser(pattern))):
+            try:
+                with open(path, encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            block = re.search(r'"ParentalSettings"\s*\{(.*?)\}', text, re.S)
+            if not block:
+                return "off"
+            settings = re.search(r'"settings"\s*"([^"]*)"', block.group(1))
+            return "unknown" if settings and settings.group(1).strip() else "off"
+    return "off"
 
 
 def can_flatpak():

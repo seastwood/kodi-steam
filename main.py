@@ -51,6 +51,9 @@ def start_big_picture():
     if not argv:
         return offer_install()
 
+    if not guests_warned():
+        return
+
     if steam_core.running():
         # Not an error, and not a reason to start a second client: it is
         # already here, it is only behind Kodi.
@@ -91,6 +94,62 @@ def start_big_picture():
 # in full, with the path, because somebody reading it is at a television and
 # will be typing it somewhere else entirely.
 HELPER_SETUP = "~/kodi-steam/install.sh --helper"
+
+
+# Remembered per machine: whoever said "it is on" is the person who set it up,
+# and asking them again every evening is how a warning turns into something
+# people dismiss without reading.
+ACKED = "family-view-acknowledged"
+
+
+def acknowledged():
+    return xbmcaddon.Addon().getSetting(ACKED) == "true"
+
+
+def guests_warned():
+    """Ask before putting Steam in front of guests with no Family View.
+
+    True to carry on, False if the answer was to stop.
+
+    Only when somebody is actually connected. A warning that appears when
+    nobody is there is a warning about nothing, and it is the same dialog
+    every time somebody plays alone.
+    """
+    open_session, guests = steam_core.guests_connected()
+    if not open_session or not guests:
+        return True
+    state = steam_core.family_view()
+    if state == "unknown" and acknowledged():
+        return True
+
+    who = "1 guest is" if guests == 1 else "%d guests are" % guests
+    if state == "off":
+        message = ("Family View has never been set up on this machine, and "
+                   + who + " connected to Fourth Player right now.\n\n"
+                   "Their controllers stop at Steam's own menus, but not at "
+                   "the overlay they can open from inside a game -- and that "
+                   "reaches the store.\n\n"
+                   "Settings > Family in Big Picture is where the PIN lives.")
+    else:
+        message = ("Family View has been set up here, but nothing on this "
+                   "machine can say whether it is switched on -- Steam keeps "
+                   "that where it cannot be read.\n\n" + who + " connected "
+                   "to Fourth Player right now, and the overlay they can open "
+                   "from inside a game reaches the store.")
+
+    dialog = xbmcgui.Dialog()
+    if state == "unknown" and hasattr(dialog, "yesnocustom"):
+        # Three answers, because "yes I set it up" is a different thing from
+        # "start it anyway just now", and only one of them is worth
+        # remembering.
+        answer = dialog.yesnocustom(TITLE, message, "It is on, stop asking",
+                                    "Not now", "Start anyway")
+        if answer == 2:
+            xbmcaddon.Addon().setSetting(ACKED, "true")
+            return True
+        return answer == 1
+    return bool(dialog.yesno(TITLE, message, nolabel="Not now",
+                             yeslabel="Start anyway"))
 
 
 def offer_install():

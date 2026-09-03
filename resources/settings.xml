@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- One setting, and not one anybody needs to find: it is written by the
+     dialog that asks about Family View, when somebody says they have set it
+     up. It lives here rather than in a file of the add-on's own because Kodi
+     already has a place for exactly this, and because a person who changes
+     their mind can clear it from the add-on's settings. -->
+<settings version="1">
+  <section id="script.steam">
+    <category id="guests" label="Guests">
+      <group id="1">
+        <setting id="family-view-acknowledged" type="boolean" label="Steam Family View is set up">
+          <level>0</level>
+          <default>false</default>
+          <control type="toggle"/>
+        </setting>
+      </group>
+    </category>
+  </section>
+</settings>
