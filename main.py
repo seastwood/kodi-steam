@@ -193,7 +193,11 @@ def offer_install():
                     "It needs no password, downloads " + DOWNLOAD_SIZE + ", "
                     "and works -- its sandbox is simply one more thing between "
                     "Steam and your controllers.")
-        yes = "Install Flathub"
+        # Short on purpose: Kodi cuts a long label, and the measured width
+        # fits about thirteen characters -- "Install Steam" survives and
+        # "Install Flathub" would not. What is being installed is said twice
+        # in the text above the buttons.
+        yes = "Use Flathub"
 
     if not xbmcgui.Dialog().yesno(TITLE, question, nolabel="Not now",
                                   yeslabel=yes):
