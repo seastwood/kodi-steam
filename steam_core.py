@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 
 FLATPAK_APP = "com.valvesoftware.Steam"
@@ -404,6 +405,56 @@ def raise_window(wid):
         pass
 
 
+# Where the Debian package puts the client it fetches on first run, and the
+# files its launcher checks for before deciding the install is new.
+STEAM_DIR = "~/.steam/debian-installation"
+STEAM_BOOTSTRAPPED = ("steam.sh", "ubuntu12_32/steam",
+                      "ubuntu12_32/steam-runtime/run.sh",
+                      "ubuntu12_32/steam-runtime/setup.sh")
+
+
+def needs_bootstrap():
+    """Whether Steam's own first-run prompt is still to come.
+
+    The package is a launcher; the client itself is fetched the first time it
+    runs, and before doing that Valve's script puts up a desktop dialog --
+    "Steam is proprietary (binary-only) software", Install or Cancel. On a
+    television that dialog is unanswerable: it wants a mouse, it appears over
+    Kodi, and a controller cannot reach it. Somebody who has just chosen
+    "Install Steam" from the menu is then stuck looking at it.
+
+    Detected the same way the launcher detects it, by the files it checks for,
+    so this stops being true exactly when the prompt stops appearing.
+    """
+    base = os.path.expanduser(STEAM_DIR)
+    return any(not os.access(os.path.join(base, part), os.X_OK)
+               for part in STEAM_BOOTSTRAPPED)
+
+
+def answer_first_run(where):
+    """Put a `zenity` on PATH that answers Valve's prompt with Install.
+
+    Not a way around consent: the add-on has already asked, in its own dialog,
+    in words somebody read on the television before choosing Install. This
+    answers the second copy of a question already answered, because the second
+    copy is the one nobody at a television can reach.
+
+    Only for the first launch -- once the client is there the prompt does not
+    come again, and this is not on PATH for anything else. zenity returns 0
+    for the affirmative button, which here is Install.
+    """
+    stub = os.path.join(where, "zenity")
+    try:
+        with open(stub, "w") as writing:
+            writing.write("#!/bin/sh\n"
+                          "# Answers the first-run prompt the add-on already "
+                          "asked about.\nexit 0\n")
+        os.chmod(stub, 0o755)
+    except OSError:
+        return None
+    return where
+
+
 def start(argv):
     """Start Steam and leave it running after this script exits.
 
@@ -412,8 +463,15 @@ def start(argv):
     add-on is a menu entry that ends, and the thing it started is a session
     somebody is going to spend an evening in.
     """
+    env = environment()
+    if needs_bootstrap():
+        # The client has never been fetched, so Valve's launcher is about to
+        # ask a question nobody can answer from a sofa. See answer_first_run.
+        holding = tempfile.mkdtemp(prefix="kodi-steam-")
+        if answer_first_run(holding):
+            env["PATH"] = holding + os.pathsep + env.get("PATH", "")
     try:
-        subprocess.Popen(argv, env=environment(), stdout=subprocess.DEVNULL,
+        subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError as exc:
         return str(exc)
