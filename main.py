@@ -13,6 +13,7 @@ when it is done.
 """
 
 import json
+import os
 import sys
 
 import xbmc
@@ -230,8 +231,21 @@ def take_valves_icon():
     icon is on the disk and the old one is on the menu, which looks exactly
     like the copy having failed.
     """
+    def on_disk():
+        try:
+            with open(os.path.expanduser(steam_core.TILE), "rb") as reading:
+                return reading.read()
+        except OSError:
+            return None
+
+    before = on_disk()
     used = steam_core.refresh_tile()
     if not used:
+        return
+    if on_disk() == before:
+        # Nothing changed, so there is nothing stale to throw away. This runs
+        # on every launch now, and clearing the cache each time would make
+        # Kodi re-read and re-cache the tile for no reason.
         return
     log("menu tile now %s" % used)
     try:
@@ -290,4 +304,14 @@ def install_with_progress(route, argv):
 
 
 if __name__ == "__main__":
+    # Before anything else, because the application may have been installed
+    # since the last run and by some other route -- apt, a software centre,
+    # somebody's own build. Those leave the menu showing the drawing this
+    # add-on ships, for ever, and nothing else was ever going to notice.
+    # Cheap when there is nothing to do: it compares the file it would write
+    # with the file already there and stops.
+    try:
+        take_valves_icon()
+    except Exception as exc:          # noqa: BLE001 - a tile is not the job
+        log("could not check the menu tile: %s" % exc, xbmc.LOGWARNING)
     start_big_picture()
